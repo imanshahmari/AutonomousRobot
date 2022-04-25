@@ -1,0 +1,4 @@
+message MyTestMessage1 [id=2001]
+{
+	uint16 myValue [id =1];
+}
