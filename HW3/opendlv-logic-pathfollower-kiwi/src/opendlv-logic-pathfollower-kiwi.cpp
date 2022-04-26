@@ -145,6 +145,11 @@ int32_t main(int32_t argc, char **argv) {
 
       GridPoint currentNode(0, 0);
 
+      double x0 = 0.0;
+      double y0 = 0.0;
+      double x1 = 0.0;
+      double y1 = 0.0;
+      double incrementValue = 0.05;
       // Initialize
       for (uint32_t j = 0; j < cellCountY; j++) {
         for (uint32_t i = 0; i < cellCountX; i++) {
@@ -156,45 +161,35 @@ int32_t main(int32_t argc, char **argv) {
             Point wallP0 = wall.p0();
             Point wallP1 = wall.p1();
 
-            double x0 = 0.0;
-            double y0 = 0.0;
-            double x1 = 0.0;
-            double y1 = 0.0;
-            double incrementValue = 0.05;
-
-            
             if(int(wallP0.x*2) == int(wallP1.x*2)){
-              y0 = std::min({wallP0.y,wallP1.y});
-              y1 = std::min({wallP0.y,wallP1.y});
-
-              //for (y0; y0<y1; y0 += incrementValue){
-              while(y0<y1){
-                if(gridP0.y<= y0 || y0<= gridP2.y ){
-                  grid[j][i] = -1.0;
-                }
-                else{
-                  grid[j][i] = 0.0;
+            
+              y0 = std::min(wallP0.y,wallP1.y);
+              y1 = std::max(wallP0.y,wallP1.y);
+              
+              while(y0 < y1){
+                if(gridP0.x <= wallP1.x && wallP1.x <= gridP3.x){
+                  if(gridP0.y<= y0 && y0<= gridP3.y){
+                    grid[j][i] = -1.0; 
+                  }
                 }
                 y0 += incrementValue;
               }
             }
 
             else if(int(wallP0.y*2) == int(wallP1.y*2)){
+              
               x0 = std::min({wallP0.x,wallP1.x});
-              x1 = std::min({wallP0.x,wallP1.x});
-
-              //for (x0; x0<x1; x0 += incrementValue){
-              while(x0<x1){
-                if(gridP0.x <= x0 || x0 <= gridP1.x ){
-                  grid[j][i] = -1.0;
-                }
-                else{
-                  grid[j][i] = 0.0;
+              x1 = std::max({wallP0.x,wallP1.x});
+              
+              while(x0 < x1){
+                if(gridP0.y <= wallP1.y && wallP1.y <= gridP3.y){
+                  if(gridP0.x <= x0 && x0 <= gridP3.x){
+                    grid[j][i] = -1.0;
+                  }
                 }
                 x0 += incrementValue;
               }
             }
-
 
             // COMPLETE: If there is a wall in the grid, do:
             //grid[j][i] = -1.0;
@@ -213,6 +208,7 @@ int32_t main(int32_t argc, char **argv) {
           }
         }
       }
+
       for (uint32_t j = 0; j < cellCountY; j++) {
         for (uint32_t i = 0; i < cellCountX; i++) {
           std::cout << grid[j][i] << " ";
@@ -227,6 +223,7 @@ int32_t main(int32_t argc, char **argv) {
         std::vector<GridPoint> gridPath;
         while (!pathFound) {
           // COMPLETE: Run your path search here!
+          pathFound = true;
         }
 
         // Transform into metric path
