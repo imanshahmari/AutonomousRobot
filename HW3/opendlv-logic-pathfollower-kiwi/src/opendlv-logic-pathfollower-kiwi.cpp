@@ -18,6 +18,13 @@
 #include "cluon-complete.hpp"
 #include "opendlv-standard-message-set.hpp"
 
+#include <iostream>
+#include <map>
+
+using namespace std;
+
+
+
 // Structs to hold data
 struct GridPoint {
   uint32_t i;
@@ -68,6 +75,33 @@ bool checkIntersection(Line a, Line b){
   }
   return false;
 }
+
+// function to define make use of a hashmap(dictionary)
+pair<int, int> getValuePrevious(std::map<pair<int, int>, pair<int, int>> map, pair<int, int> key) {
+
+    auto it = map.find(key);
+
+    if ( it == map.end() ) {
+        return pair<int, int> (-1, -1);
+    }
+    else {
+        return it->second;
+    }
+}
+
+int getValueVisited(std::map<pair<int, int>, int > map, pair<int, int> key) {
+
+    auto it = map.find(key);
+
+    if ( it == map.end() ) {
+        return -1;
+    }
+    else {
+        return it->second;
+    }
+}
+
+
 
 // Main function
 int32_t main(int32_t argc, char **argv) {
@@ -145,6 +179,40 @@ int32_t main(int32_t argc, char **argv) {
 
       GridPoint currentNode(0, 0);
 
+
+      std::pair<int, int> keyVertex (0,0);
+      std::pair<int, int> valueVertex (0,0);
+
+      std::pair<int, int> keyVistedNodes(0,0);
+      int notVisited = 0;
+
+      std::map<pair<int, int>, pair<int, int>> previousVertex;
+      std::map<pair<int, int>, int > visitedNodes;
+
+
+
+      //map[coor1] = coor2;
+      //pair<int, int> result = getValue(map, std::pair<int, int> (1,2));
+      
+
+      for (uint32_t n = 0; n < cellCountY; n++) {
+        for (uint32_t m = 0; m < cellCountX; m++) {
+          keyVertex.first = n;
+          keyVertex.second = m;
+          valueVertex.first = 0;
+          valueVertex.second = 0;
+          previousVertex[keyVertex] = valueVertex;
+
+          keyVistedNodes.first = n;
+          keyVistedNodes.second = m;
+
+          visitedNodes[keyVistedNodes] = notVisited;
+        }
+      }
+
+
+
+
       double x0 = 0.0;
       double y0 = 0.0;
       double x1 = 0.0;
@@ -190,6 +258,14 @@ int32_t main(int32_t argc, char **argv) {
                 x0 += incrementValue;
               }
             }
+
+
+            //pair<int, int> result = getValuePrevious(map, std::pair<int, int> (i,j));
+
+            //cout << result.first << " " << result.second << endl;
+
+            int node = getValueVisited(visitedNodes,std::pair<int, int> (i,j));
+            cout << node << endl;
 
             // COMPLETE: If there is a wall in the grid, do:
             //grid[j][i] = -1.0;
