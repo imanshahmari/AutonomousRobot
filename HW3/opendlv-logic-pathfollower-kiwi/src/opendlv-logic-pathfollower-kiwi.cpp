@@ -20,6 +20,7 @@
 
 #include <iostream>
 #include <map>
+#include <tuple>
 
 using namespace std;
 
@@ -82,7 +83,7 @@ pair<int, int> getValuePrevious(std::map<pair<int, int>, pair<int, int>> map, pa
     auto it = map.find(key);
 
     if ( it == map.end() ) {
-        return pair<int, int> (-1, -1);
+        return pair<int, int> (-100, -100);
     }
     else {
         return it->second;
@@ -94,11 +95,21 @@ int getValueVisited(std::map<pair<int, int>, int > map, pair<int, int> key) {
     auto it = map.find(key);
 
     if ( it == map.end() ) {
-        return -1;
+        return -100;
     }
     else {
         return it->second;
     }
+}
+
+
+bool isGridAvailable(std::vector<std::vector<double>> g,GridPoint a){
+  if(int(g[a.j][a.i]) == -1){
+    return false;
+  }
+  else{
+    return true;
+  }
 }
 
 
@@ -178,13 +189,12 @@ int32_t main(int32_t argc, char **argv) {
             std::numeric_limits<double>::infinity()));
 
       GridPoint currentNode(0, 0);
-
+      GridPoint endNode(0,0);
 
       std::pair<int, int> keyVertex (0,0);
       std::pair<int, int> valueVertex (0,0);
 
       std::pair<int, int> keyVistedNodes(0,0);
-      int notVisited = 0;
 
       std::map<pair<int, int>, pair<int, int>> previousVertex;
       std::map<pair<int, int>, int > visitedNodes;
@@ -205,8 +215,7 @@ int32_t main(int32_t argc, char **argv) {
 
           keyVistedNodes.first = n;
           keyVistedNodes.second = m;
-
-          visitedNodes[keyVistedNodes] = notVisited;
+          visitedNodes[keyVistedNodes] = 0; //zero means is it is unvisited 
         }
       }
 
@@ -259,32 +268,33 @@ int32_t main(int32_t argc, char **argv) {
               }
             }
 
+            if (((gridP0.y <= startPoint.y) && (startPoint.y <= gridP3.y)) && ((gridP0.x <= startPoint.x) && (startPoint.x <= gridP3.x))) {    
+              grid[j][i] = 0.0;
+              currentNode = GridPoint(i, j);
+            }
+            
+            if (((gridP0.y <= endPoint.y) && (endPoint.y <= gridP3.y)) && ((gridP0.x <= endPoint.x) && (endPoint.x <= gridP3.x))) {    
+              //grid[j][i] = 100.0;
+              endNode = GridPoint(i, j);
+            }
+            
+
+
+
+
+
 
             //pair<int, int> result = getValuePrevious(map, std::pair<int, int> (i,j));
 
             //cout << result.first << " " << result.second << endl;
 
-            int node = getValueVisited(visitedNodes,std::pair<int, int> (i,j));
-            cout << node << endl;
+            //int node = getValueVisited(visitedNodes,std::pair<int, int> (i,j));
+            //cout << node << endl;
 
-            // COMPLETE: If there is a wall in the grid, do:
-            //grid[j][i] = -1.0;
-            
-            // COMPLETE: If the start position is in the grid cell, do:
-            //grid[j][i] = 0.0;
-            //currentNode = GridPoint(i, j);
-            /* 
-            (void) gridP0; // Remove when used
-            (void) gridP1; // Remove when used
-            (void) gridP2; // Remove when used
-            (void) gridP3; // Remove when used
-            (void) wallP0; // Remove when used
-            (void) wallP1; // Remove when used
-            */
           }
         }
       }
-
+      // Printing the grid
       for (uint32_t j = 0; j < cellCountY; j++) {
         for (uint32_t i = 0; i < cellCountX; i++) {
           std::cout << grid[j][i] << " ";
@@ -295,12 +305,138 @@ int32_t main(int32_t argc, char **argv) {
 
       // Find the path
       {
-        bool pathFound = false;
+        //bool pathFound = false;
         std::vector<GridPoint> gridPath;
-        while (!pathFound) {
+        //int gridDistance = 1.0;
+        GridPoint top(0,0);
+        GridPoint below(0,0);
+        GridPoint left(0,0);
+        GridPoint right(0,0);
+        std::vector<GridPoint> neighboursList;
+        GridPoint nodeLowestDistan(0,0);
+
+
+        int stop = 0;
+
+        while (stop < 250) {
           // COMPLETE: Run your path search here!
-          pathFound = true;
+          for (uint32_t j = 0; j < cellCountY; j++) {
+            for (uint32_t i = 0; i < cellCountX; i++) {
+              //std::cout << grid[j][i] << " ";
+
+              //check if current node
+                if (currentNode.j == j && currentNode.i == i){
+                  // We want to put it in the visited nodes
+                  keyVistedNodes.first = j;
+                  keyVistedNodes.second = i;
+                  visitedNodes[keyVistedNodes] = 1; // 1 means it has been visited
+
+                  // Get the neighbours
+                  top.i = i;
+                  top.j = j+1;
+                  below.i = i;
+                  below.j = j-1;
+                  left.i = i-1;
+                  left.j = j;
+                  right.i = i+1;
+                  right.j = j;
+
+                  // Check if the neighbours are avaiable 
+                  if(isGridAvailable(grid,top)){
+                    //grid[top.j][top.i] = 1.0;
+                    neighboursList.push_back(top);
+                  }
+                  if(isGridAvailable(grid,below)){
+                    //grid[below.j][below.i] = 1.0;
+                    neighboursList.push_back(below);
+                  }
+                  if(isGridAvailable(grid,left)){
+                    //grid[left.j][left.i] = 1.0;
+                    neighboursList.push_back(left);
+                  }
+                  if(isGridAvailable(grid,right)){
+                    //grid[right.j][right.i] = 1.0;
+                    neighboursList.push_back(right);
+                  }
+
+                  // checking the distance in neighbour list and update the previous vertex of the neighbour
+                  for(auto &element:neighboursList){
+                    if(grid[currentNode.j][currentNode.i] < grid[element.j][element.i]){
+                      grid[element.j][element.i] = grid[currentNode.j][currentNode.i] + 1.0;
+                    }
+                    //grid[element.j][element.i] = 1.0;
+
+                    keyVertex.first = element.j;
+                    keyVertex.second = element.i;
+                    valueVertex.first = j;
+                    valueVertex.second = i;
+                    previousVertex[keyVertex] = valueVertex;
+
+                  }
+                }
+            //int node = getValueVisited(visitedNodes,std::pair<int, int> (i,j));
+            //cout << node << endl;
+            }
+            //std::cout << std::endl;
+          }
+          //chekcing the unvisted nodes and 
+          double smallestKnownDistance = 10000.0;
+          for (uint32_t j = 0; j < cellCountY; j++) {
+            for (uint32_t i = 0; i < cellCountX; i++) {
+              int isVisited  = getValueVisited(visitedNodes,std::pair<int, int> (j,i));
+              if (isVisited == 0 && int(grid[j][i]) != -1){
+                double currentDistance = grid[j][i];
+                //std::cout << "it is the case"<<currentDistance<< ","<< smallestKnownDistance << std::endl;
+                if (currentDistance < smallestKnownDistance) {
+                  smallestKnownDistance = currentDistance;
+                  currentNode.j=j;
+                  currentNode.i=i;
+                }
+              }
+            }
+          }
+          
+          //currentNode = GridPoint(2, 1);
+          
+
+          stop++;
+          neighboursList.clear(); //clear it for each time we find the current node
+          //pathFound = true;
         }
+
+        // Printing the grid
+        std::cout << std::endl;
+        for (uint32_t l = 0; l < cellCountY; l++) {
+          for (uint32_t k = 0; k < cellCountX; k++) {
+            std::cout << grid[l][k] << " ";
+          }
+          std::cout << std::endl;
+        }
+
+        pair<int, int> last;
+        last.first = endNode.j;
+        last.second = endNode.i;
+
+        pair<int, int> before;
+        before.first = 1;
+        before.second = 1;
+
+        GridPoint currGridPoint(0,0);
+        std::vector< GridPoint> result;
+
+        while(before.first != last.first && before.second != last.second){
+          pair<int, int> previous = getValuePrevious(previousVertex,last);
+          currGridPoint.j = previous.first;
+          currGridPoint.i = previous.second;
+          result.push_back(currGridPoint);
+          std::cout <<"path is"<<  currGridPoint.j << currGridPoint.i;
+          last = previous;
+
+        }
+
+        //pair<int, int> previous = getValuePrevious(grid, pair<int, int> before)
+
+
 
         // Transform into metric path
         for (auto &gp : gridPath) {
