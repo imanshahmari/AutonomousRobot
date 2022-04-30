@@ -15,6 +15,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+
+#include "cluon-complete.hpp"
+#include "opendlv-standard-message-set.hpp"
+
 #include "cluon-complete.hpp"
 #include "opendlv-standard-message-set.hpp"
 
@@ -23,8 +29,6 @@
 #include <tuple>
 
 using namespace std;
-
-
 
 // Structs to hold data
 struct GridPoint {
@@ -112,6 +116,8 @@ bool isGridAvailable(std::vector<std::vector<double>> g,GridPoint a){
   }
 }
 
+double distanceX;
+double distanceY;
 
 
 // Main function
@@ -124,10 +130,11 @@ int32_t main(int32_t argc, char **argv) {
       || 0 == commandlineArguments.count("start-y")
       || 0 == commandlineArguments.count("end-x")
       || 0 == commandlineArguments.count("end-y")
+      || 0 == commandlineArguments.count("frame-id")
       || 0 == commandlineArguments.count("freq")) {
     std::cerr << argv[0] << " finds a path between to points in a walled "
       "arena, and follows it." << std::endl;
-    std::cerr << "Example: " << argv[0] << "--cid=111 --freq=10 --frame-id=0 "
+    std::cerr << "Example: " << argv[0] << " --cid=111 --freq=10 --frame-id=0 "
       "--map-file=/opt/simulation-map.txt --start-x=0.0 --start-y=0.0 "
       "--end-x=1.0 --end-y=1.0" << std::endl;
     retCode = 1;
@@ -177,8 +184,8 @@ int32_t main(int32_t argc, char **argv) {
           }
         }
 
-        double distanceX = maxX - minX;
-        double distanceY = maxY - minY;
+        distanceX = maxX - minX;
+        distanceY = maxY - minY;
         cellCountX = static_cast<uint32_t>(ceil(distanceX / gridSize));
         cellCountY = static_cast<uint32_t>(ceil(distanceY / gridSize));
       }
@@ -427,6 +434,33 @@ int32_t main(int32_t argc, char **argv) {
             Point p(x, y);
             path.push_back(p);
         }
+      
+
+      if (verbose) {
+        uint32_t windowWidth = 300;
+          uint32_t windowHeight = (int)((windowWidth*distanceY)/distanceX);
+          cv::Mat gridMap(windowWidth, windowHeight, CV_8UC3, cv::Scalar(0, 0, 0));
+          cv::Mat map(windowWidth, windowHeight, CV_8UC3, cv::Scalar(0, 0, 0));
+          for (auto &wall : walls) {
+            cv::line(gridMap, cv::Point((int)(wall.x0*windowWidth/distanceX), (int)(wall.y0*windowHeight/distanceY)), 
+                              cv::Point((int)(wall.x1*windowWidth/distanceX), (int)(wall.y1*windowHeight/distanceY)), 
+                              cv::Scalar(0, 255, 0), 2, cv::LINE_8);
+          }
+          for (uint32_t j = 0; j < cellCountY; j++) {
+            for (uint32_t i = 0; i < cellCountX; i++) {
+              cv::Scalar color = ((int)grid[j][i]==-1) ? cv::Scalar(0, 0, 255) : cv::Scalar(255, 255, 255);
+              cv::circle(gridMap, cv::Point((int)(i*gridSize*windowHeight/distanceY), (int)(j*gridSize*windowWidth/distanceX)), 1, color, -1);
+            }
+          }
+          for (auto &gp : gridPath) {
+            cv::circle(gridMap, cv::Point((int)(gp.i*gridSize*windowHeight/distanceY), (int)(gp.j*gridSize*windowWidth/distanceX)), 2, cv::Scalar(255, 0, 0), -1);
+          } 
+          cv::circle(gridMap, cv::Point((int)(startPoint.x*windowHeight/distanceY), (int)(startPoint.y*windowWidth/distanceX)), 4, cv::Scalar(0, 0, 255), -1);
+          cv::circle(gridMap, cv::Point((int)(endPoint.x*windowHeight/distanceY), (int)(endPoint.y*windowWidth/distanceX)), 4, cv::Scalar(0, 0, 255), -1);
+          cv::imshow("Grid map", gridMap);
+          cv::waitKey(1);
+      }
+      
       }
     }
     // .. by leaving this scope, only the "path" and "verbose" are saved
@@ -462,14 +496,14 @@ int32_t main(int32_t argc, char **argv) {
 
           if (verbose) {
             std::cout << "Robot position [" << latestFrame.x() << ", " 
-              << latestFrame.y() << ", " << latestFrame.yaw() << "]"<< std::endl;
+              << latestFrame.y() << ", " << latestFrame.yaw() << std::endl;
           }
         }
     }};
 
     auto onDistanceReading{[&distanceFront, &distanceLeft, &distanceRear,
       &distanceRight, &distanceMutex](
-          cluon::data::Envelope &&envelope)
+        cluon::data::Envelope &&envelope)
       {
         uint32_t const senderStamp = envelope.senderStamp();
         auto distanceReading = 
@@ -489,7 +523,8 @@ int32_t main(int32_t argc, char **argv) {
       }};
 
     auto atFrequency{[&latestFrame, &frameMutex, &distanceFront, &distanceLeft, 
-      &distanceRear, &distanceRight, &distanceMutex, &path, &od4]() -> bool
+      &distanceRear, &distanceRight, &distanceMutex, &path, &od4, &verbose]() 
+        -> bool
       {
         double posX;
         double posY;
@@ -513,10 +548,7 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         float groundSteering = 0.0f;
-        float pedalPosition = 0.002f;
-
-
-
+        float pedalPosition = 0.02f;
 
         // COMPLETE: Use the path, the current position, and possibly the
         // distance readings to calculate steering and throttle.
@@ -538,6 +570,18 @@ int32_t main(int32_t argc, char **argv) {
         cluon::data::TimeStamp sampleTime;
         od4.send(groundSteeringRequest, sampleTime, 0);
         od4.send(pedalPositionRequest, sampleTime, 0);
+
+        if (verbose) {
+          // Visualise the path and the robot
+          uint32_t w = 300;
+          uint32_t h = 400;
+          cv::Mat globalMap(w, h, CV_8UC3, cv::Scalar(0, 0, 0));
+  
+          cv::line(globalMap, cv::Point(0, 0), cv::Point(50, 50), 
+              cv::Scalar(255, 0, 0), 2, cv::LINE_8);
+          cv::imshow("Global map", globalMap);
+          cv::waitKey(1);
+        }
         
         return true;
       }};

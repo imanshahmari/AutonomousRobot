@@ -4,7 +4,7 @@ services:
     sim-global:
         image: registry.opendlv.org/testing/opendlv-virtual-space:v0.0.8
         network_mode: "host"
-        command: "/usr/bin/opendlv-virtual-space --cid=111 --freq=50 --frame-id=0 --x=0.0 --yaw=0.2 --timemod=1.0"
+        command: "/usr/bin/opendlv-virtual-space --cid=111 --freq=50 --frame-id=0 --x=0.21 --y=0.21 --yaw=0.0 --timemod=1.0"
 
     sim-motor-kiwi:
         image: chalmersrevere/opendlv-sim-motor-kiwi-amd64:v0.0.7
@@ -39,7 +39,12 @@ services:
           - ./simulation-map.txt:/opt/simulation-map.txt
         command: "/usr/bin/opendlv-virtual-adc-bbblue --map-file=/opt/simulation-map.txt --x=0.0 --y=-0.1 --yaw=-1.57 --cid=111 --freq=10 --frame-id=0 --id=3"
     
-    logic-test-kiwi:
-        image: chalmersrevere/opendlv-logic-test-kiwi-amd64:v0.0.6
+    logic-pathfollower-kiwi:
+        image: opendlv-logic-pathfollower-kiwi
         network_mode: "host"
-        command: "/usr/bin/opendlv-logic-test-kiwi --cid=111 --freq=100"
+        volumes:
+          - ./simulation-map.txt:/opt/simulation-map.txt
+          - /tmp:/tmp
+        environment:
+          - DISPLAY=${DISPLAY}
+        command: "/usr/bin/opendlv-logic-pathfollower-kiwi --cid=111 --freq=10 --frame-id=0 --map-file=/opt/simulation-map.txt --start-x=0.21 --start-y=0.21 --end-x=3.99 --end-y=3.99 --verbose"
