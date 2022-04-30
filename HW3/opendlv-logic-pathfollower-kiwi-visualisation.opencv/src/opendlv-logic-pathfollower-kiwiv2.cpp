@@ -15,6 +15,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+
+#include "cluon-complete.hpp"
+#include "opendlv-standard-message-set.hpp"
+
 #include "cluon-complete.hpp"
 #include "opendlv-standard-message-set.hpp"
 
@@ -24,6 +30,50 @@
 
 using namespace std;
 
+
+
+
+
+
+const int N_MARGIN_CELLS = 2;
+
+const int N_SEARCH_DIRECTIONS = 4;
+const int i_CHANGES[N_SEARCH_DIRECTIONS] = {-1,  0, 1, 0};
+const int j_CHANGES[N_SEARCH_DIRECTIONS] = { 0, -1, 0, 1};
+
+const cv::Scalar WINDOW_BACKGROUND_COLOR(0, 0, 0);
+const cv::Scalar WALLS_COLOR(0, 255, 0);
+const cv::Scalar EMPTY_GRID_COLOR(255, 255, 255);
+const cv::Scalar WALL_GRID_COLOR(0, 0, 255);
+const cv::Scalar PATH_GRID_COLOR(255, 0, 0);
+const cv::Scalar AIM_POINT_COLOR(255, 255, 255);
+const cv::Scalar KIWI_COLOR(0, 0, 255);
+
+const std::string GRID_WINDOW_NAME = "Grid map";
+const std::string KIWI_WINDOW_NAME = "Global map";
+
+const int EMPTY_GRID_CODE = 0;
+const int WALL_GRID_CODE = -1;
+const int PATH_GRID_CODE = -2;
+
+const double KIWI_LENGTH = 0.36;
+const double KIWI_WIDTH = 0.16;
+
+const double PI = 2*std::acos(0.0);
+
+const int WINDOW_WIDTH = 600;
+
+const int ROTATION_HALF_TIME = 10;
+
+const float GROUND_STEERING_WHILE_ROTATION_COEFF = 2*0.290888f/3.1415f;
+
+const float PEDAL_POSITION_WHILE_ROTATION_AND_MOVING_FORWARD = 0.05f;
+const float PEDAL_POSITION_WHILE_ROTATION_AND_MOVING_BACKWARD = -PEDAL_POSITION_WHILE_ROTATION_AND_MOVING_FORWARD * 5.22f;
+
+const float PEDAL_POSITION_WHILE_MOVING_FORWARD = 0.1f;
+
+const double MAX_ANGULAR_DEVIATION = 0.08;
+const double EPSILLON = 0.1;
 
 
 // Structs to hold data
@@ -113,6 +163,23 @@ bool isGridAvailable(std::vector<std::vector<double>> g,GridPoint a){
 }
 
 
+double distance(Point p1, Point p2) {
+  return std::sqrt(std::pow(p1.x-p2.x,2)+std::pow(p1.y-p2.y,2));
+}
+
+
+double getAngle(Point kiwiCoordinates, double kiwiYaw, Point aimPoint) {
+  double pathVectorX = aimPoint.x - kiwiCoordinates.x;
+  double pathVectorY = aimPoint.y - kiwiCoordinates.y;
+  double pathAngle = atan(pathVectorY/pathVectorX);
+  if (pathVectorX<0 && pathVectorY>0) {pathAngle+=PI;}
+  else if (pathVectorX<0 && pathVectorY<0) {pathAngle-=PI;}
+  double angularDiff = pathAngle-kiwiYaw;
+  if (angularDiff<-PI) {angularDiff+=2*PI;}
+  else if (angularDiff>PI) {angularDiff-=2*PI;}
+  return angularDiff;
+}
+
 
 // Main function
 int32_t main(int32_t argc, char **argv) {
@@ -124,10 +191,11 @@ int32_t main(int32_t argc, char **argv) {
       || 0 == commandlineArguments.count("start-y")
       || 0 == commandlineArguments.count("end-x")
       || 0 == commandlineArguments.count("end-y")
+      || 0 == commandlineArguments.count("frame-id")
       || 0 == commandlineArguments.count("freq")) {
     std::cerr << argv[0] << " finds a path between to points in a walled "
       "arena, and follows it." << std::endl;
-    std::cerr << "Example: " << argv[0] << "--cid=111 --freq=10 --frame-id=0 "
+    std::cerr << "Example: " << argv[0] << " --cid=111 --freq=10 --frame-id=0 "
       "--map-file=/opt/simulation-map.txt --start-x=0.0 --start-y=0.0 "
       "--end-x=1.0 --end-y=1.0" << std::endl;
     retCode = 1;
@@ -136,6 +204,10 @@ int32_t main(int32_t argc, char **argv) {
 
     // Part I: Find the path using the map and the start and end points
     std::vector<Point> path;
+    std::vector<Line> walls;
+    double distanceX;
+    double distanceY;
+
     {
       double gridSize = 0.2;
 
@@ -144,7 +216,7 @@ int32_t main(int32_t argc, char **argv) {
       Point endPoint(std::stod(commandlineArguments["end-x"]),
             std::stod(commandlineArguments["end-y"]));
 
-      std::vector<Line> walls;
+      //std::vector<Line> walls;
       std::ifstream input(commandlineArguments["map-file"]);
 
       // Parse walls
@@ -177,8 +249,8 @@ int32_t main(int32_t argc, char **argv) {
           }
         }
 
-        double distanceX = maxX - minX;
-        double distanceY = maxY - minY;
+        distanceX = maxX - minX;
+        distanceY = maxY - minY;
         cellCountX = static_cast<uint32_t>(ceil(distanceX / gridSize));
         cellCountY = static_cast<uint32_t>(ceil(distanceY / gridSize));
       }
@@ -196,7 +268,7 @@ int32_t main(int32_t argc, char **argv) {
 
       std::pair<int, int> keyVistedNodes(0,0);
 
-      std::map<pair<int, int>, pair<int, int>> previousVertex;
+      std::map<pair<int, int>, pair<int, int>> previousVertexMap;
       std::map<pair<int, int>, int > visitedNodes;
 
       
@@ -209,8 +281,6 @@ int32_t main(int32_t argc, char **argv) {
           visitedNodes[keyVistedNodes] = 0; //zero means is it is unvisited 
         }
       }
-
-
 
 
       double x0 = 0.0;
@@ -262,16 +332,21 @@ int32_t main(int32_t argc, char **argv) {
             if (((gridP0.y <= startPoint.y) && (startPoint.y <= gridP3.y)) && ((gridP0.x <= startPoint.x) && (startPoint.x <= gridP3.x))) {    
               grid[j][i] = 0.0;
               currentNode = GridPoint(i, j);
+              //startNode = GridPoint(i, j);
             }
             
             if (((gridP0.y <= endPoint.y) && (endPoint.y <= gridP3.y)) && ((gridP0.x <= endPoint.x) && (endPoint.x <= gridP3.x))) {    
-              //grid[j][i] = 100.0;
+              grid[j][i] = 100.0;
               endNode = GridPoint(i, j);
             }
             
           }
         }
       }
+      std::cout << "end node is " << endNode.j << "," << endNode.i << std::endl;
+
+
+
       // Printing the grid
       for (uint32_t j = 0; j < cellCountY; j++) {
         for (uint32_t i = 0; i < cellCountX; i++) {
@@ -283,9 +358,7 @@ int32_t main(int32_t argc, char **argv) {
 
       // Find the path
       {
-        //bool pathFound = false;
         std::vector<GridPoint> gridPath;
-        //int gridDistance = 1.0;
         GridPoint top(0,0);
         GridPoint below(0,0);
         GridPoint left(0,0);
@@ -294,17 +367,16 @@ int32_t main(int32_t argc, char **argv) {
         GridPoint nodeLowestDistan(0,0);
 
 
-        int stop = 0;
+        //int stop = 0;
+        bool pathFound = false;
 
-        while (stop < 250) {
+        while (!pathFound) {
           // COMPLETE: Run your path search here!
           for (uint32_t j = 0; j < cellCountY; j++) {
             for (uint32_t i = 0; i < cellCountX; i++) {
-              //std::cout << grid[j][i] << " ";
-
               //check if current node
                 if (currentNode.j == j && currentNode.i == i){
-                  // We want to put it in the visited nodes
+                  // Put current node in visited node list
                   keyVistedNodes.first = j;
                   keyVistedNodes.second = i;
                   visitedNodes[keyVistedNodes] = 1; // 1 means it has been visited
@@ -319,50 +391,46 @@ int32_t main(int32_t argc, char **argv) {
                   right.i = i+1;
                   right.j = j;
 
-                  // Check if the neighbours are avaiable 
+                  //For the current vertex examine its unvisited neighbours 
                   if(isGridAvailable(grid,top)){
-                    //grid[top.j][top.i] = 1.0;
                     neighboursList.push_back(top);
                   }
                   if(isGridAvailable(grid,below)){
-                    //grid[below.j][below.i] = 1.0;
                     neighboursList.push_back(below);
                   }
                   if(isGridAvailable(grid,left)){
-                    //grid[left.j][left.i] = 1.0;
                     neighboursList.push_back(left);
                   }
                   if(isGridAvailable(grid,right)){
-                    //grid[right.j][right.i] = 1.0;
                     neighboursList.push_back(right);
                   }
 
-                  // checking the distance in neighbour list and update the previous vertex of the neighbour
+                  //Calculate the the distance of each neighbour from the start vertex and 
+                  //update the previous vertex of the neighbour if the calculated distance is less than tht known distance
                   for(auto &element:neighboursList){
                     if(grid[currentNode.j][currentNode.i] < grid[element.j][element.i]){
                       grid[element.j][element.i] = grid[currentNode.j][currentNode.i] + 1.0;
-
+                      std::cout << "key value is " <<keyVertex.first << "," << keyVertex.second << " value is "  << valueVertex.first << ","  << valueVertex.second << std::endl;
+                      
                       keyVertex.first = element.j;
                       keyVertex.second = element.i;
                       valueVertex.first = currentNode.j;
                       valueVertex.second = currentNode.i;
-                      std::cout << "key value is " <<keyVertex.first << "," << keyVertex.second << " value is "  << valueVertex.first << ","  << valueVertex.second << std::endl;
-                      previousVertex[keyVertex] = valueVertex;
-
+                      previousVertexMap[keyVertex] = valueVertex;
+                      
                     }
                   }
                 }
 
             }
           }
-          //chekcing the unvisted nodes and 
+          //Visit the unvisited vertex with the smallest known distance from start vertex  
           double smallestKnownDistance = 10000.0;
           for (uint32_t j = 0; j < cellCountY; j++) {
             for (uint32_t i = 0; i < cellCountX; i++) {
               int isVisited  = getValueVisited(visitedNodes,std::pair<int, int> (j,i));
               if (isVisited == 0 && int(grid[j][i]) != -1){
                 double currentDistance = grid[j][i];
-                //std::cout << "it is the case"<<currentDistance<< ","<< smallestKnownDistance << std::endl;
                 if (currentDistance < smallestKnownDistance) {
                   smallestKnownDistance = currentDistance;
                   currentNode.j=j;
@@ -372,10 +440,11 @@ int32_t main(int32_t argc, char **argv) {
             }
           }
           
-          
-          stop++;
-          neighboursList.clear(); //clear it for each time we find the current node
-          //pathFound = true;
+          if(currentNode.j == endNode.j && currentNode.i == endNode.i){
+            pathFound = true;
+            std::cout << "end node is " << currentNode.j << "," << currentNode.i << std::endl;
+          }
+          neighboursList.clear(); //clear neighbours for each time we find the current node
         }
 
         // Printing the grid
@@ -387,36 +456,54 @@ int32_t main(int32_t argc, char **argv) {
           std::cout << std::endl;
         }
 
-        pair<int, int> last;
-        last.first = endNode.j-1;
-        last.second = endNode.i-1;
-        std::cout << last.first<<last.second;
+
+
+        //Trace back the path and put it in the vector result
+        pair<int, int> lastNodeInPath;
+        lastNodeInPath.first = endNode.j;
+        lastNodeInPath.second = endNode.i;
+
+        std::cout<< "debugging input is" <<lastNodeInPath.first<<","<<lastNodeInPath.second<<std::endl;
+
         pair<int, int> before;
         before.first = 1;
         before.second = 1;
 
-        GridPoint currGridPoint(0,0);
+        GridPoint convertGridPoint(0,0);
         std::vector< GridPoint > result;
 
-        while(before.first != last.first && before.second != last.second){
-        pair<int, int> previous = getValuePrevious(previousVertex,last);
-        currGridPoint.j = previous.first;
-        currGridPoint.i = previous.second;
-        result.push_back(currGridPoint);
-        std::cout <<"grid point is"<<  previous.first << "," << previous.second << std::endl;
-        last = previous;
+        pair<int, int> test = getValuePrevious(previousVertexMap,lastNodeInPath);
+        std::cout<< "first iteration is " <<test.first<<","<<test.second<<std::endl;
+
+
+        while(before.first != lastNodeInPath.first && before.second != lastNodeInPath.second){
+        pair<int, int> previous = getValuePrevious(previousVertexMap,lastNodeInPath);
+        convertGridPoint.j = previous.first;
+        convertGridPoint.i = previous.second;
+        result.push_back(convertGridPoint);
+        lastNodeInPath = previous;
         }
-        pair<int, int> previous = getValuePrevious(previousVertex,last);
-        std::cout <<"grid point is"<<  previous.first << "," << previous.second << std::endl;
-        currGridPoint.j = previous.first;
-        currGridPoint.i = previous.second;
-        result.push_back(currGridPoint);
+        pair<int, int> previous = getValuePrevious(previousVertexMap,lastNodeInPath);
+        convertGridPoint.j = previous.first;
+        convertGridPoint.i = previous.second;
+        result.push_back(convertGridPoint);
 
 
         for(auto &element:result){
           std::cout <<"list element "<< element.j <<","<< element.i << std::endl;
+          grid[element.j][element.i] = 8.0;
         }
 
+
+
+        // Printing the grid
+        std::cout << std::endl;
+        for (uint32_t l = 0; l < cellCountY; l++) {
+          for (uint32_t k = 0; k < cellCountX; k++) {
+            std::cout << grid[l][k] << " ";
+          }
+          std::cout << std::endl;
+        }
 
 
         // Transform into metric path
@@ -427,6 +514,41 @@ int32_t main(int32_t argc, char **argv) {
             Point p(x, y);
             path.push_back(p);
         }
+      
+
+      if (verbose) {
+
+          uint32_t windowHeight = (int)((WINDOW_WIDTH*distanceY)/distanceX);
+          cv::Mat gridMap(WINDOW_WIDTH, windowHeight, CV_8UC3, cv::Scalar(0, 0, 0));
+          cv::Mat map(WINDOW_WIDTH, windowHeight, CV_8UC3, cv::Scalar(0, 0, 0));
+
+          for (uint32_t j = 0; j < cellCountY; j++) {
+            for (uint32_t i = 0; i < cellCountX; i++) {
+              if ((int)grid[j][i] == -1){
+                cv::Scalar color = cv::Scalar(0, 0, 255);
+                cv::circle(gridMap, cv::Point((int)(i*gridSize*windowHeight/distanceY), (int)(j*gridSize*WINDOW_WIDTH/distanceX)), 1, color, -1);
+              }
+              else if((int)grid[j][i] == 0){
+                cv::Scalar color = cv::Scalar(0, 0, 255);
+                cv::circle(gridMap, cv::Point((int)(i*gridSize*windowHeight/distanceY), (int)(j*gridSize*WINDOW_WIDTH/distanceX)), 4, color, -1);
+              }
+              else if (int(j) == (int)endNode.j && int(i) == (int)endNode.i ){
+                cv::Scalar color = cv::Scalar(0, 0, 255);
+                cv::circle(gridMap, cv::Point((int)(i*gridSize*windowHeight/distanceY), (int)(j*gridSize*WINDOW_WIDTH/distanceX)), 4, color, -1);
+              }
+              else{
+                cv::Scalar color = cv::Scalar(255, 255, 255);
+                cv::circle(gridMap, cv::Point((int)(i*gridSize*windowHeight/distanceY), (int)(j*gridSize*WINDOW_WIDTH/distanceX)), 1, color, -1);
+              }
+            }
+          }
+          for (auto &gp : result) {
+            cv::circle(gridMap, cv::Point((int)(gp.i*gridSize*windowHeight/distanceY), (int)(gp.j*gridSize*WINDOW_WIDTH/distanceX)), 2, cv::Scalar(255, 0, 0), -1);
+          } 
+          cv::imshow("Grid map", gridMap);
+          cv::waitKey(1);
+      }
+      
       }
     }
     // .. by leaving this scope, only the "path" and "verbose" are saved
@@ -462,14 +584,14 @@ int32_t main(int32_t argc, char **argv) {
 
           if (verbose) {
             std::cout << "Robot position [" << latestFrame.x() << ", " 
-              << latestFrame.y() << ", " << latestFrame.yaw() << "]"<< std::endl;
+              << latestFrame.y() << ", " << latestFrame.yaw() << "]" <<std::endl;
           }
         }
     }};
 
     auto onDistanceReading{[&distanceFront, &distanceLeft, &distanceRear,
       &distanceRight, &distanceMutex](
-          cluon::data::Envelope &&envelope)
+        cluon::data::Envelope &&envelope)
       {
         uint32_t const senderStamp = envelope.senderStamp();
         auto distanceReading = 
@@ -488,8 +610,13 @@ int32_t main(int32_t argc, char **argv) {
         }
       }};
 
+    bool isRotating = false;
+    double angularError = 0;
+    int rotationCounter = 0;
     auto atFrequency{[&latestFrame, &frameMutex, &distanceFront, &distanceLeft, 
-      &distanceRear, &distanceRight, &distanceMutex, &path, &od4]() -> bool
+      &distanceRear, &distanceRight, &distanceMutex, &path, &od4, &verbose, &isRotating, 
+      &angularError, &rotationCounter, &distanceY, &distanceX, &walls]() 
+        -> bool
       {
         double posX;
         double posY;
@@ -513,13 +640,58 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         float groundSteering = 0.0f;
-        float pedalPosition = 0.002f;
-        
-        
-
+        float pedalPosition = 0.0f;
 
         // COMPLETE: Use the path, the current position, and possibly the
         // distance readings to calculate steering and throttle.
+
+        if (path.size()==0) {return true;}
+        
+        Point aimPoint = path[0];
+
+        if (distance(aimPoint, Point(posX, posY))<EPSILLON) {path.erase(path.begin());}
+
+        else
+        {
+          double angle = getAngle(Point(posX,posY), posYaw, aimPoint);
+          if (std::abs(std::sin(angle))*distance(aimPoint, Point(posX, posY))>0.9*EPSILLON || std::abs(angle)>PI/2)
+          {
+            if (isRotating)
+            {
+              if (rotationCounter<2*ROTATION_HALF_TIME)
+              {
+                if (rotationCounter<ROTATION_HALF_TIME)
+                {
+                  groundSteering = GROUND_STEERING_WHILE_ROTATION_COEFF* (float)angularError;
+                  pedalPosition = PEDAL_POSITION_WHILE_ROTATION_AND_MOVING_FORWARD;
+                }
+                else
+                {
+                  groundSteering = GROUND_STEERING_WHILE_ROTATION_COEFF* (float)angularError;
+                  pedalPosition = PEDAL_POSITION_WHILE_ROTATION_AND_MOVING_BACKWARD;
+                }
+                rotationCounter+=1;
+              }
+              else
+              {
+                rotationCounter = 0;
+                isRotating = false;
+              }
+            }
+            else
+            {
+              isRotating = true;
+              angularError = angle;
+            }
+          }
+          else
+          {
+            groundSteering = 0;
+            pedalPosition = PEDAL_POSITION_WHILE_MOVING_FORWARD;
+          }
+        }
+
+
 
         (void) posX; // Remove when used
         (void) posY; // Remove when used
@@ -528,6 +700,9 @@ int32_t main(int32_t argc, char **argv) {
         (void) distLeft; // Remove when used
         (void) distRear; // Remove when used
         (void) distRight; // Remove when used
+
+
+
 
         opendlv::proxy::GroundSteeringRequest groundSteeringRequest;
         groundSteeringRequest.groundSteering(groundSteering);
@@ -538,6 +713,47 @@ int32_t main(int32_t argc, char **argv) {
         cluon::data::TimeStamp sampleTime;
         od4.send(groundSteeringRequest, sampleTime, 0);
         od4.send(pedalPositionRequest, sampleTime, 0);
+
+        
+        if (verbose) {
+          uint32_t windowHeight = (int)((WINDOW_WIDTH*distanceY)/distanceX);
+          cv::Mat globalMap(WINDOW_WIDTH, windowHeight, CV_8UC3, WINDOW_BACKGROUND_COLOR);
+
+          for (auto &wall : walls) {
+          cv::line(globalMap, cv::Point((int)(wall.x0*WINDOW_WIDTH/distanceX), (int)(wall.y0*windowHeight/distanceY)), 
+                            cv::Point((int)(wall.x1*WINDOW_WIDTH/distanceX), (int)(wall.y1*windowHeight/distanceY)), 
+                            WALLS_COLOR, 2, cv::LINE_8);
+          }
+
+          cv::circle(globalMap, cv::Point((int)(aimPoint.x*windowHeight/distanceY), 
+                     (int)(aimPoint.y*WINDOW_WIDTH/distanceX)), 4, AIM_POINT_COLOR, -1);
+          
+          double kiwiX = posX*windowHeight/distanceY;
+          double kiwiY = posY*WINDOW_WIDTH/distanceX;
+          cv::circle(globalMap, cv::Point((int)kiwiX, (int)kiwiY), 4, KIWI_COLOR, -1);
+
+          double directionVectorEndX = kiwiX + KIWI_LENGTH/2*std::cos(posYaw)*windowHeight/distanceY;
+          double directionVectorEndY = kiwiY + KIWI_LENGTH/2*std::sin(posYaw)*windowHeight/distanceY;
+
+          cv::RotatedRect rRect = cv::RotatedRect(cv::Point2f((int)kiwiX,(int)kiwiY), 
+                                          cv::Size2f((int)(KIWI_LENGTH*windowHeight/distanceY),
+                                                 (int)(KIWI_WIDTH*windowHeight/distanceY)), (float)(posYaw*180.0f/(float)PI));
+
+          
+          cv::line(globalMap, cv::Point((int)kiwiX, (int)kiwiY), 
+                   cv::Point((int)directionVectorEndX, (int)directionVectorEndY),
+                   KIWI_COLOR, 2, cv::LINE_8);
+
+          cv::Point2f vertices[4];
+          rRect.points(vertices);
+          for (int i = 0; i < 4; i++) {
+            line(globalMap, vertices[i], vertices[(i+1)%4], KIWI_COLOR, 2);
+          }
+
+          cv::imshow(KIWI_WINDOW_NAME, globalMap);
+          cv::waitKey(1);
+        }
+        
         
         return true;
       }};
