@@ -39,8 +39,6 @@ int32_t main(int32_t argc, char **argv) {
     uint16_t const cid = std::stoi(commandlineArguments["cid"]);
     
     cluon::OD4Session od4{cid};
-     
-    int32_t someVariable{0};
     
     //Robot object 
     Robot grassCutter;
@@ -48,7 +46,7 @@ int32_t main(int32_t argc, char **argv) {
     //SensorData object
     SensorData sensorData;
 
-    auto onSensors{[&od4, &someVariable,&sensorData,&grassCutter](cluon::data::Envelope &&envelope)
+    auto onSensors{[&od4,&sensorData,&grassCutter](cluon::data::Envelope &&envelope)
       {
         auto msg = cluon::extractMessage<tme290::grass::Sensors>(
             std::move(envelope));
@@ -71,24 +69,16 @@ int32_t main(int32_t argc, char **argv) {
         sensorData.rainCloudDirX = msg.rainCloudDirX(); 
         sensorData.rainCloudDirY = msg.rainCloudDirY();
 
-	      grassCutter.set_sensorData(sensorData);
-
-        auto result  = grassCutter.get_sensorData();
-
-        std::cout << "Result is " << result.time << std::endl;
-
-	      someVariable++;
-
+        //std::cout<<"coordinate is:"<<msg.i()<<","<<msg.j()<<std::endl;
         tme290::grass::Control control;
-
+        
+        grassCutter.set_sensorData(sensorData);
         // After 20 steps, start pausing on every other step.
-	
-        if (someVariable > 20 && someVariable % 2 == 0) {
-          control.command(0);
-        } else {
-          control.command(4);
-        }
-		
+
+        control.command(grassCutter.decideAction());
+
+
+
         /*
         std::cout << "Rain reading " << msg.rain() << ", direction (" <<
         msg.rainCloudDirX() << ", " << msg.rainCloudDirY()<< ")"  <<"time:"<< msg.time()  <<"Grass:" << msg.grassTopLeft()  <<msg.grassTopCentre()  <<msg.grassTopRight()  <<msg.grassLeft()  <<msg.grassCentre() <<msg.grassRight()  <<msg.grassBottomLeft()  <<msg.grassBottomCentre()  <<msg.grassBottomRight()  <<"rain:"<< msg.rain()  <<"battery:"<<msg.battery()  <<"rainCloud:"<< msg.rainCloudDirX()  <<msg.rainCloudDirY() << std::endl; 

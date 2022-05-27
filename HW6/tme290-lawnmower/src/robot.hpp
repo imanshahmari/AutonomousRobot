@@ -30,27 +30,32 @@ class Robot{
         SensorData m_sensorData;
         std::vector<std::pair<uint32_t ,uint32_t >> m_pathHistory;
         //states
-        int cutHorizontally();
-        int cutVertically();
-        int cutDiagonally();
-        int backToCharge();
-        int continueFromLast();
-        int avoidRain();
-        int avoidWall();
+        int stay();
+        //int cutHorizontallyLeft();
+        int cutHorizontallyRight();
+        //int cutVerticallyUp();
+        //int cutVerticallyDown();
+        //int cutDiagonallyUpLeft();
+        //int cutDiagonallyUpRight();
+        //int cutDiagonallyDownLeft();
+        //int cutDiagonallyDownRight();
+        //int backToCharge();
+        //int continueFromLast();
+        //int avoidRain();
+        //int avoidWall();
+
         //checks
         bool isRain();
-        bool isBatteryLow();
-        bool isWall();
+        //bool isBatteryLow();
+        //bool isWall();
+        bool isGrassLow(int,float);
+
         
-
-
-
 	public:
 		Robot();
-		void PrintFunction();
 		void set_sensorData(SensorData);
 		SensorData get_sensorData();
-		int DecideState();
+		int decideAction();
 
 
 };
