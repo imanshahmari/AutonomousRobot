@@ -1,0 +1,8 @@
+/home/iman/git/AutonomousRobot/HW6/tme290-lawnmower/b/CMakeFiles/install/strip.dir
+/home/iman/git/AutonomousRobot/HW6/tme290-lawnmower/b/CMakeFiles/install/local.dir
+/home/iman/git/AutonomousRobot/HW6/tme290-lawnmower/b/CMakeFiles/edit_cache.dir
+/home/iman/git/AutonomousRobot/HW6/tme290-lawnmower/b/CMakeFiles/install.dir
+/home/iman/git/AutonomousRobot/HW6/tme290-lawnmower/b/CMakeFiles/list_install_components.dir
+/home/iman/git/AutonomousRobot/HW6/tme290-lawnmower/b/CMakeFiles/rebuild_cache.dir
+/home/iman/git/AutonomousRobot/HW6/tme290-lawnmower/b/CMakeFiles/tme290-lawnmower-trainer.dir
+/home/iman/git/AutonomousRobot/HW6/tme290-lawnmower/b/CMakeFiles/tme290-lawnmower.dir
