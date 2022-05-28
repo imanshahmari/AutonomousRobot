@@ -27,27 +27,30 @@ struct SensorData{
 
 class Robot{
     private:
+        //Attributes
         SensorData m_sensorData;
-        std::vector<std::pair<uint32_t ,uint32_t >> m_pathHistory;
+        std::vector<int> m_pathBack;
+        bool m_findBackState;
         //states
         int stay();
         //int cutHorizontallyLeft();
         int cutHorizontallyRight();
         //int cutVerticallyUp();
-        //int cutVerticallyDown();
+        int cutVerticallyDown();
         //int cutDiagonallyUpLeft();
         //int cutDiagonallyUpRight();
         //int cutDiagonallyDownLeft();
         //int cutDiagonallyDownRight();
-        //int backToCharge();
-        //int continueFromLast();
+        int backToCharge();
+        int continueFromLast();
         //int avoidRain();
         //int avoidWall();
 
         //checks
         bool isRain();
-        //bool isBatteryLow();
-        //bool isWall();
+        bool isBatteryLow();
+        bool isBatteryFull();
+        bool isWall(int);
         bool isGrassLow(int,float);
 
         
