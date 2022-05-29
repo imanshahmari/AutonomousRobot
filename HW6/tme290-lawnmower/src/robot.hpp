@@ -31,9 +31,12 @@ class Robot{
         SensorData m_sensorData;
         std::vector<int> m_pathBack;
         bool m_findBackState;
+        bool m_chargingState;
+        bool m_randomState;
+
         //states
         int stay();
-        //int cutHorizontallyLeft();
+        int cutHorizontallyLeft();
         int cutHorizontallyRight();
         //int cutVerticallyUp();
         int cutVerticallyDown();
@@ -43,6 +46,8 @@ class Robot{
         //int cutDiagonallyDownRight();
         int backToCharge();
         int continueFromLast();
+        int charge();
+        int goRandom();
         //int avoidRain();
         //int avoidWall();
 
@@ -59,8 +64,6 @@ class Robot{
 		void set_sensorData(SensorData);
 		SensorData get_sensorData();
 		int decideAction();
-
-
 };
 
 
